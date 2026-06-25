@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="面向阅读新手和重启阅读习惯者的文学作品选书导航：输入作品名和作者，输出优势、阅读方向与可解释评分。" />
+    <title>文学作品评价体系</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">Literary Evaluation System</p>
+          <h1>文学作品评价体系</h1>
+          <p class="subtitle">不是替文学下判决，而是帮想开始读书的人判断：这本书强在哪里、难在哪里、适不适合现在读。</p>
+        </div>
+        <a class="github-link" href="./README.md">项目说明</a>
+      </header>
+
+      <section class="layout">
+        <section class="left-panel">
+          <form id="evaluation-form" class="card search-card">
+            <label>
+              <span>文学作品</span>
+              <input id="work-title" name="work-title" autocomplete="off" placeholder="例如：百年孤独" required />
+            </label>
+            <label>
+              <span>作者</span>
+              <input id="author-name" name="author-name" autocomplete="off" placeholder="例如：加西亚·马尔克斯" required />
+            </label>
+            <button id="evaluate-button" type="submit">开始评价</button>
+          </form>
+
+          <article class="card info-card">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Work</p>
+                <h2 id="work-heading">作品介绍</h2>
+              </div>
+              <a id="work-source" class="source-link" hidden target="_blank" rel="noreferrer">来源</a>
+            </div>
+            <p id="work-description" class="empty-text">输入作品名和作者后，这里会显示检索到的作品介绍。</p>
+          </article>
+
+          <article class="card info-card">
+            <div class="section-head">
+              <div>
+                <p class="eyebrow">Author</p>
+                <h2 id="author-heading">作者背景</h2>
+              </div>
+              <a id="author-source" class="source-link" hidden target="_blank" rel="noreferrer">来源</a>
+            </div>
+            <p id="author-description" class="empty-text">这里会显示作者背景，用于辅助判断作品影响力、思想深度和跨文化传播。</p>
+          </article>
+
+          <article class="card guidance-card">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">Reading Guide</p>
+                <h2>这本书该怎么读</h2>
+              </div>
+            </div>
+            <div id="reading-guide" class="guide-grid">
+              <div class="placeholder">完成评价后，这里会给出优势、阅读方向和适合人群。</div>
+            </div>
+          </article>
+        </section>
+
+        <aside class="right-panel">
+          <article class="score-card">
+            <p class="eyebrow">Score</p>
+            <div class="total-score">
+              <strong id="total-score">--</strong>
+              <span>/ 100</span>
+            </div>
+            <p id="confidence">等待评价</p>
+          </article>
+
+          <article class="card recommendation-card">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">For You</p>
+                <h2>阅读推荐</h2>
+              </div>
+            </div>
+            <div class="recommendation-score">
+              <strong id="reader-fit-score">--</strong>
+              <span>/ 100</span>
+            </div>
+            <p id="reader-fit-copy">输入作品后，会判断它是否适合作为当前阶段的阅读选择。</p>
+          </article>
+
+          <article class="card">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">Dimensions</p>
+                <h2>多维评分</h2>
+              </div>
+            </div>
+            <div id="dimension-list" class="dimension-list">
+              <div class="placeholder">评分结果会显示在这里。</div>
+            </div>
+          </article>
+
+          <article class="card">
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">Explanation</p>
+                <h2>评分依据</h2>
+              </div>
+            </div>
+            <ul id="reason-list" class="reason-list">
+              <li>模型会展示触发评分的关键词和信息信号。</li>
+            </ul>
+          </article>
+        </aside>
+      </section>
+    </main>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <script type="module" src="./src/app.js"></script>
+  </body>
+</html>
