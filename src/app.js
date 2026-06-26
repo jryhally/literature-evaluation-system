@@ -58,6 +58,8 @@ const beginnerFriendlySignals = ["短篇", "散文", "随笔", "儿童文学", "
 const heavyReadingSignals = ["意识流", "现代主义", "哲学", "实验", "复杂", "晦涩", "长篇", "史诗", "多线", "象征主义"];
 
 const $ = (selector) => document.querySelector(selector);
+const $$ = (selector) => [...document.querySelectorAll(selector)];
+let currentCandidates = [];
 
 function showToast(message) {
   const toast = $("#toast");
@@ -77,7 +79,7 @@ function escapeHTML(value = "") {
   return div.innerHTML;
 }
 
-async function searchWikipedia(query) {
+async function searchWikipediaCandidates(query, limit = 5) {
   const searchURL = new URL(WIKI_API);
   searchURL.search = new URLSearchParams({
     action: "query",
@@ -85,15 +87,28 @@ async function searchWikipedia(query) {
     srsearch: query,
     format: "json",
     origin: "*",
-    srlimit: "1"
+    srlimit: String(limit)
   });
 
   const searchResponse = await fetch(searchURL);
   if (!searchResponse.ok) throw new Error("百科搜索失败");
   const searchData = await searchResponse.json();
-  const page = searchData.query?.search?.[0];
-  if (!page) return null;
+  const pages = searchData.query?.search || [];
+  return pages.map((page) => ({
+    pageid: page.pageid,
+    title: page.title,
+    snippet: page.snippet?.replace(/<[^>]*>/g, "") || ""
+  }));
+}
 
+async function searchWikipedia(query) {
+  const pages = await searchWikipediaCandidates(query, 1);
+  const page = pages[0];
+  if (!page) return null;
+  return fetchWikipediaPage(page.pageid, page);
+}
+
+async function fetchWikipediaPage(pageid, fallback = {}) {
   const extractURL = new URL(WIKI_API);
   extractURL.search = new URLSearchParams({
     action: "query",
@@ -101,7 +116,7 @@ async function searchWikipedia(query) {
     exintro: "1",
     explaintext: "1",
     cllimit: "20",
-    pageids: String(page.pageid),
+    pageids: String(pageid),
     format: "json",
     origin: "*"
   });
@@ -109,20 +124,78 @@ async function searchWikipedia(query) {
   const extractResponse = await fetch(extractURL);
   if (!extractResponse.ok) throw new Error("百科摘要获取失败");
   const extractData = await extractResponse.json();
-  const detail = extractData.query?.pages?.[page.pageid];
+  const detail = extractData.query?.pages?.[pageid];
   if (!detail) return null;
 
   return {
+    pageid,
     title: detail.title,
-    extract: detail.extract || page.snippet?.replace(/<[^>]*>/g, "") || "",
-    source: `https://zh.wikipedia.org/?curid=${page.pageid}`,
+    extract: detail.extract || fallback.snippet || "",
+    source: `https://zh.wikipedia.org/?curid=${pageid}`,
     categories: (detail.categories || []).map((item) => item.title.replace(/^Category:/, ""))
   };
+}
+
+function dedupeCandidates(candidates) {
+  const seen = new Set();
+  return candidates.filter((item) => {
+    if (!item?.pageid || seen.has(item.pageid)) return false;
+    seen.add(item.pageid);
+    return true;
+  });
+}
+
+async function findWorkCandidates(title, author) {
+  const queries = [
+    `${title} ${author} 文学作品`,
+    `${title} ${author}`,
+    `${title} 小说`,
+    `${title} 文学作品`,
+    title
+  ];
+
+  const results = await Promise.allSettled(queries.map((query) => searchWikipediaCandidates(query, 5)));
+  const candidates = dedupeCandidates(results.flatMap((result) => result.status === "fulfilled" ? result.value : []));
+  const scored = candidates.map((candidate) => {
+    const haystack = `${candidate.title} ${candidate.snippet}`;
+    const exactTitle = candidate.title === title;
+    const titleInTitle = candidate.title.includes(title) || title.includes(candidate.title);
+    const titleInSnippet = candidate.snippet.includes(title);
+    const authorHit = author && haystack.includes(author);
+    const literaryHit = /小说|文学|作品|长篇|短篇|诗|戏剧|散文|作家|改编/.test(haystack);
+    return {
+      ...candidate,
+      matchScore:
+        (exactTitle ? 120 : 0) +
+        (!exactTitle && titleInTitle ? 58 : 0) +
+        (titleInSnippet ? 24 : 0) +
+        (authorHit ? 28 : 0) +
+        (literaryHit ? 14 : 0) +
+        Math.max(0, 6 - Math.abs(candidate.title.length - title.length))
+    };
+  });
+
+  const strongMatches = scored.filter((candidate) => candidate.matchScore >= 24);
+  return (strongMatches.length ? strongMatches : scored)
+    .sort((a, b) => b.matchScore - a.matchScore)
+    .slice(0, 6);
 }
 
 async function fetchLiteraryContext(title, author) {
   const [work, authorInfo] = await Promise.allSettled([
     searchWikipedia(`${title} ${author} 文学作品`),
+    searchWikipedia(`${author} 作家`)
+  ]);
+
+  return {
+    work: work.status === "fulfilled" ? work.value : null,
+    author: authorInfo.status === "fulfilled" ? authorInfo.value : null
+  };
+}
+
+async function fetchLiteraryContextFromCandidate(candidate, author) {
+  const [work, authorInfo] = await Promise.allSettled([
+    fetchWikipediaPage(candidate.pageid, candidate),
     searchWikipedia(`${author} 作家`)
   ]);
 
@@ -154,13 +227,16 @@ function scoreDimension(dimension, contextText, title, author) {
   return clamp(raw);
 }
 
-function buildReasons(contextText, work, authorInfo) {
+function buildReasons(contextText, work, authorInfo, requestedAuthor = "") {
   const reasons = [];
   const awards = awardSignals.filter((signal) => contextText.includes(signal));
   const classics = classicSignals.filter((signal) => contextText.includes(signal));
 
   if (work?.extract) reasons.push(`已检索到作品介绍：${work.title}。`);
   if (authorInfo?.extract) reasons.push(`已检索到作者背景：${authorInfo.title}。`);
+  if (requestedAuthor && work?.extract && !`${work.title} ${work.extract}`.includes(requestedAuthor)) {
+    reasons.push(`注意：作品介绍中没有明显出现“${requestedAuthor}”，请确认作者是否匹配。`);
+  }
   if (awards.length) reasons.push(`发现奖项信号：${awards.join("、")}。`);
   if (classics.length) reasons.push(`发现经典化/传播信号：${classics.join("、")}。`);
   if (contextText.length > 650) reasons.push("公开资料较丰富，评分置信度相对更高。");
@@ -261,9 +337,19 @@ function evaluate(title, author, context) {
     total,
     dimensions: scored,
     confidence,
-    reasons: buildReasons(contextText, context.work, context.author),
+    reasons: buildReasons(contextText, context.work, context.author, author),
     guide: buildReaderGuide(scored, contextText, title)
   };
+}
+
+function resetResults(message = "请先从候选作品中选择一本，再生成评价。") {
+  $("#total-score").textContent = "--";
+  $("#confidence").textContent = "等待确认作品";
+  $("#reader-fit-score").textContent = "--";
+  $("#reader-fit-copy").textContent = message;
+  $("#dimension-list").innerHTML = `<div class="placeholder">${message}</div>`;
+  $("#reason-list").innerHTML = `<li>${escapeHTML(message)}</li>`;
+  $("#reading-guide").innerHTML = `<div class="placeholder">${message}</div>`;
 }
 
 function renderContext(title, author, context) {
@@ -319,6 +405,65 @@ function renderScores(result) {
   $("#reason-list").innerHTML = result.reasons.map((reason) => `<li>${escapeHTML(reason)}</li>`).join("");
 }
 
+function renderCandidates(candidates, title, author) {
+  currentCandidates = candidates;
+  const card = $("#candidate-card");
+  const list = $("#candidate-list");
+  card.hidden = false;
+
+  if (!candidates.length) {
+    $("#candidate-hint").textContent = `没有找到与“${title} / ${author}”接近的公开条目。可以换一个译名、原名或只输入书名试试。`;
+    list.innerHTML = "";
+    resetResults("暂未找到候选作品，请换个书名或作者名再试。");
+    return;
+  }
+
+  $("#candidate-hint").textContent = `我找到了 ${candidates.length} 个相似条目。请先点选你真正想评价的作品，避免书名/作者不配对导致误判。`;
+  list.innerHTML = candidates.map((candidate, index) => `
+    <button class="candidate-item" type="button" data-candidate-index="${index}">
+      <span class="candidate-rank">${index + 1}</span>
+      <span class="candidate-copy">
+        <strong>${escapeHTML(candidate.title)}</strong>
+        <small>${escapeHTML(candidate.snippet || "暂无摘要，点击后尝试读取详情。")}</small>
+      </span>
+      <span class="candidate-action">选择</span>
+    </button>
+  `).join("");
+
+  $$("[data-candidate-index]").forEach((button) => {
+    button.addEventListener("click", () => selectCandidate(Number(button.dataset.candidateIndex)));
+  });
+
+  resetResults("已找到候选，请先选择一本作品。");
+}
+
+async function selectCandidate(index) {
+  const candidate = currentCandidates[index];
+  const author = $("#author-name").value.trim();
+  if (!candidate) return;
+
+  $$("[data-candidate-index]").forEach((button) => {
+    button.classList.toggle("active", Number(button.dataset.candidateIndex) === index);
+  });
+
+  const button = $("#evaluate-button");
+  button.disabled = true;
+  button.textContent = "生成评价…";
+
+  try {
+    const context = await fetchLiteraryContextFromCandidate(candidate, author);
+    renderContext(candidate.title, author, context);
+    renderScores(evaluate(candidate.title, author, context));
+    showToast(`已选择《${candidate.title}》`);
+  } catch (error) {
+    console.error(error);
+    showToast("读取候选详情失败，请换一个候选试试");
+  } finally {
+    button.disabled = false;
+    button.textContent = "重新搜索";
+  }
+}
+
 async function handleEvaluation(event) {
   event.preventDefault();
   const title = $("#work-title").value.trim();
@@ -330,18 +475,17 @@ async function handleEvaluation(event) {
   button.textContent = "评价中…";
 
   try {
-    const context = await fetchLiteraryContext(title, author);
-    renderContext(title, author, context);
-    renderScores(evaluate(title, author, context));
+    const candidates = await findWorkCandidates(title, author);
+    renderCandidates(candidates, title, author);
+    renderContext(title, author, { work: null, author: null });
   } catch (error) {
     console.error(error);
-    const fallbackContext = { work: null, author: null };
-    renderContext(title, author, fallbackContext);
-    renderScores(evaluate(title, author, fallbackContext));
-    showToast("资料检索失败，已生成低置信度评分");
+    renderCandidates([], title, author);
+    renderContext(title, author, { work: null, author: null });
+    showToast("资料检索失败，请换个书名或作者名再试");
   } finally {
     button.disabled = false;
-    button.textContent = "开始评价";
+    button.textContent = "重新搜索";
   }
 }
 

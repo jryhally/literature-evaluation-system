@@ -32,6 +32,17 @@
             <button id="evaluate-button" type="submit">开始评价</button>
           </form>
 
+          <article class="card candidate-card" id="candidate-card" hidden>
+            <div class="section-head compact">
+              <div>
+                <p class="eyebrow">Confirm</p>
+                <h2>你要找的是哪一本？</h2>
+              </div>
+            </div>
+            <p class="candidate-hint" id="candidate-hint">先确认作品，再生成评价，避免书名或作者不匹配时误判。</p>
+            <div id="candidate-list" class="candidate-list"></div>
+          </article>
+
           <article class="card info-card">
             <div class="section-head">
               <div>

@@ -142,6 +142,89 @@ button {
   padding: 22px;
 }
 
+.candidate-card {
+  padding: 22px;
+}
+
+.candidate-hint {
+  margin-bottom: 14px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+
+.candidate-list {
+  display: grid;
+  gap: 10px;
+}
+
+.candidate-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  height: auto;
+  min-height: 74px;
+  padding: 13px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  color: var(--text);
+  background: #fbf8f2;
+  box-shadow: none;
+  text-align: left;
+}
+
+.candidate-item:hover,
+.candidate-item.active {
+  border-color: rgba(124, 63, 29, .36);
+  background: #fffaf2;
+}
+
+.candidate-rank {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--primary), var(--primary-2));
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  font-weight: 900;
+}
+
+.candidate-copy {
+  min-width: 0;
+}
+
+.candidate-copy strong,
+.candidate-copy small {
+  display: block;
+}
+
+.candidate-copy strong {
+  margin-bottom: 5px;
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  font-size: 15px;
+}
+
+.candidate-copy small {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  font-size: 13px;
+  line-height: 1.45;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.candidate-action {
+  color: var(--primary);
+  font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "PingFang SC", sans-serif;
+  font-size: 13px;
+  font-weight: 900;
+}
+
 .section-head {
   display: flex;
   align-items: flex-start;
